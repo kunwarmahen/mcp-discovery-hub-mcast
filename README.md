@@ -1,132 +1,192 @@
 # MCP Discovery Hub
 
-**Automatic discovery and management of Model Context Protocol (MCP) servers across your network.**
+Automatic discovery and management of Model Context Protocol (MCP) servers across your network.
 
-## What is MCP Discovery Hub?
+Inspired by DLNA (Digital Living Network Alliance) and UPnP (Universal Plug and Play), MCP Discovery Hub brings zero-configuration networking to AI tool discovery. Just as your TV automatically finds Chromecast devices and your phone discovers AirPlay speakers, MCP Discovery Hub automatically finds and connects to MCP servers on your local network.
 
-MCP Discovery Hub is a centralized discovery and orchestration platform that automatically finds, catalogs, and manages MCP servers running on your network. It enables seamless integration of multiple MCP servers with AI tools and applications without manual configuration.
+## Philosophy
 
-## What's New (v2.0)
+Why DLNA/UPnP? Because they work. Your devices have been discovering each other without configuration for decades. We're applying the same battle-tested principles to AI:
 
-### Multi-Transport Support
+| Problem                 | DLNA/UPnP Solution            | MCP Discovery Hub                   |
+| ----------------------- | ----------------------------- | ----------------------------------- |
+| **Discovery**           | Devices broadcast "I'm here!" | Servers broadcast via multicast UDP |
+| **Configuration**       | Zero config, just works™      | Zero config, just works™            |
+| **Service Description** | XML descriptors               | JSON tool schemas                   |
+| **Control**             | SOAP/HTTP protocol            | REST/WebSocket + JSON-RPC           |
+| **Multi-device**        | Seamless integration          | Multi-server orchestration          |
 
-The hub now supports three different MCP server implementations:
+Instead of manually configuring each MCP server, just start them and the hub discovers everything automatically.
 
-1. **Traditional MCP Servers** (JSON-RPC with session management)
+## The Problem
 
-   - Full JSON-RPC 2.0 compliance
-   - Session-based communication
-   - Best for stateful, production deployments
+You have multiple MCP servers running across your network, but:
 
-2. **FastMCP HTTP Mode** (JSON-RPC with automatic sessions)
+- 😫 No easy way to discover them
+- 🔌 Each server requires manual configuration
+- 🤝 No unified interface to interact with multiple servers
+- 🚀 Switching between LLM providers means reconfiguring everything
 
-   - Uses the FastMCP library's HTTP transport
-   - JSON-RPC format with session management
-   - Requires `notifications/initialized` after initialization
-   - Ideal for containerized deployments
-
-3. **FastMCP Streamable-HTTP** (Simplified format)
-   - No JSON-RPC wrapper (simpler protocol)
-   - No session management required
-   - Cleaner, more efficient for stateless operations
-   - Best for lightweight deployments
-
-### Automatic Multicast Broadcasting
-
-Servers now broadcast their presence using multicast UDP, enabling truly zero-configuration discovery:
-
-- Servers announce themselves periodically on `239.255.255.250:5353`
-- Hub listens passively for announcements
-- No manual registration or DNS configuration needed
-- Servers are discovered automatically as they come online
-
-### Enhanced Tool Execution
-
-The hub intelligently handles tool execution across different server types:
-
-- Detects server protocol version automatically
-- Uses appropriate request format for each server type
-- Handles both SSE and JSON responses
-- Manages sessions transparently
-
-## Architecture
+## The Solution
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   MCP Servers                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│  │ Traditional  │  │ FastMCP HTTP │  │ Streamable   │
-│  │ MCP Server   │  │ Mode         │  │ HTTP Mode    │
-│  │ (JSON-RPC)   │  │ (JSON-RPC)   │  │ (Simplified) │
-│  └──────────────┘  └──────────────┘  └──────────────┘
-│        │                  │                  │
-│        └──────────────────┴──────────────────┘
-│                     │
-│        Multicast UDP 239.255.255.250:5353
-│                     │
-│        ┌────────────▼────────────┐
-│        │  MCP Discovery Hub      │
-│        │  ┌────────────────────┐ │
-│        │  │ Server Probing     │ │
-│        │  │ (Auto-detection)   │ │
-│        │  ├────────────────────┤ │
-│        │  │ Tool Catalog       │ │
-│        │  ├────────────────────┤ │
-│        │  │ Tool Execution     │ │
-│        │  │ (Multi-protocol)   │ │
-│        │  ├────────────────────┤ │
-│        │  │ LLM Integration    │ │
-│        │  │ (Ollama/OpenAI)    │ │
-│        │  └────────────────────┘ │
-│        └─────────────────────────┘
-│                     │
-└─────────────────────┼──────────────────────────────┘
-                      │
-              HTTP API & WebSocket
-                      │
-         ┌────────────┬──────────────┐
-         │            │              │
-      Web UI       CLI Tools      LLM Apps
+Scan Network → Discover Tools → Chat with Any LLM
+(Just like DLNA discovers your smart TV)
 ```
+
+**Core Features:**
+
+- **Auto-discover MCP servers** on your network (UPnP-style discovery)
+- **Browse tools** from all discovered servers in one interface
+- **Select tools** you want to use (drag-and-drop style)
+- **Chat with your LLM** using selected tools seamlessly
+- **Multi-LLM support**: Ollama, OpenAI, Claude, Gemini, vLLM, and more
+- **Beautiful UI** with real-time discovery and streaming responses
+- **Zero configuration** - just start servers and they appear
+
+## How It Works
+
+### Discovery Process
+
+**DLNA/UPnP Discovery:**
+
+1. Device broadcasts: "I'm here! I'm a media server!"
+2. Control point listens and catalogs devices
+3. User selects device from list
+4. Control point connects and uses device services
+
+**MCP Discovery Hub Process:**
+
+1. Hub listens for multicast announcements: "Who's an MCP server?"
+2. Servers broadcast: "I'm here! Here are my tools"
+3. Tools appear in real-time in your interface
+4. User selects tools and chats with LLM
+
+### Architecture
+
+```
+MCP Servers (any type)
+├── Traditional (JSON-RPC)
+├── FastMCP HTTP (JSON-RPC)
+└── FastMCP Streamable (Simplified)
+        ↓
+   Multicast UDP 239.255.255.250:5353
+   (Like SSDP in UPnP)
+        ↓
+┌─────────────────────────────────────┐
+│   Discovery Hub (port 8000)         │
+│   (Like UPnP Control Point)         │
+├─────────────────────────────────────┤
+│ • Network Listening & Probing       │
+│ • Tool Catalog Management           │
+│ • Multi-protocol Execution          │
+│ • LLM Integration (multi-provider)  │
+└─────────────────────────────────────┘
+        ↓
+   WebSocket & REST API
+        ↓
+┌──────────────┬──────────────┬──────────┐
+│  Web UI      │  CLI Tools   │ LLM Apps │
+│  (Like DLNA  │              │          │
+│   Control    │              │          │
+│   Point App) │              │          │
+└──────────────┴──────────────┴──────────┘
+```
+
+### Sequence Diagram
+
+```
+Client         Discovery Hub    MCP Server
+│              │                │
+├─ Scan ─────>│                │
+│              │                │
+│              ├─ Listen for broadcasts or probe
+│              ├──────────────────────────>│
+│              │                │
+│              │<─ Service Description ──│
+│              │ (Tools, capabilities)   │
+│              │                │
+│<─ Server Found─┤                │
+│  (Real-time)   │                │
+│                │                │
+├─ Chat + Tools─>│                │
+│                ├─ Execute Tool──>│
+│                │                │
+│                │<─ Tool Result ─┤
+│<─ LLM Response-┤                │
+│  (Streaming)   │                │
+```
+
+## Supported Server Types
+
+The hub intelligently handles three different MCP implementations:
+
+| Protocol               | Format       | Sessions      | Discovery        | Best For                        |
+| ---------------------- | ------------ | ------------- | ---------------- | ------------------------------- |
+| **Traditional MCP**    | JSON-RPC 2.0 | Session-based | HTTP probing     | Stateful production deployments |
+| **FastMCP HTTP**       | JSON-RPC 2.0 | Session-based | Multicast + HTTP | Containerized deployments       |
+| **FastMCP Streamable** | Simplified   | Stateless     | Multicast + HTTP | Lightweight operations          |
 
 ## Quick Start
 
-### 1. Start the Discovery Hub
+### 1. Install & Run Discovery Hub
 
 ```bash
-cd mcp_discovery_hub
+git clone https://github.com/kunwarmahen/mcp-discovery-hub-mcast.git
+cd mcp-discovery-hub-mcast
+
+# Backend setup
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
 python mcp_discovery.py
 ```
 
-The hub will:
+The hub will start on port 8000 and automatically listen for server announcements on the multicast address.
 
-- Start on port 8000
-- Listen for multicast announcements
-- Expose HTTP API at `http://localhost:8000`
-- Open WebSocket at `ws://localhost:8000/ws`
+### 2. Launch MCP Servers
 
-### 2. Start MCP Servers
+Servers announce themselves automatically via multicast. Start any MCP server:
 
-Each server broadcasts automatically:
+**Traditional MCP Server**
 
 ```bash
-# Traditional MCP Server (File System)
 python sample_mcp_server.py
+```
 
-# FastMCP Podman Server (HTTP mode)
+**FastMCP HTTP Mode**
+
+```bash
 MCP_TRANSPORT=http MCP_PORT=3001 uv run main.py
+```
 
-# Or FastMCP Podman Server (Streamable-HTTP mode)
+**FastMCP Streamable-HTTP Mode**
+
+```bash
 MCP_TRANSPORT=streamable-http MCP_PORT=3001 uv run main.py
 ```
 
-### 3. Access the Hub
+Servers are discovered automatically as they come online.
+
+### 3. Setup Frontend (Optional - for beautiful UI)
 
 ```bash
-# Get discovered servers
+# In a new terminal
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` to see servers appear in real-time.
+
+### 4. Query via API
+
+```bash
+# Get all discovered servers
 curl http://localhost:8000/servers
 
-# List tools from all servers
+# List all available tools
 curl http://localhost:8000/servers | jq '.[] | .tools'
 
 # Execute a tool
@@ -143,29 +203,38 @@ curl -X POST http://localhost:8000/execute-tool \
 
 ### Hub Configuration
 
-```env
-MCP_ENABLE_PASSIVE_DISCOVERY=true    # Listen for broadcasts
-DEBUG_LOGGING=false                  # Enable debug output
+```bash
+# Environment variables for discovery hub
+MCP_ENABLE_PASSIVE_DISCOVERY=true      # Listen for multicast broadcasts
+DEBUG_LOGGING=false                     # Enable debug output
+NETWORK_SCAN_PORTS=[3000,3001,3002]    # Fallback ports for manual scanning
+WEBSOCKET_HEARTBEAT_INTERVAL=30        # Heartbeat interval in seconds
 ```
 
 ### Server Configuration
 
-```env
-# For all servers
-MCP_TRANSPORT=http                   # Transport mode
-MCP_PORT=3001                        # Server port
-MCP_SERVER_NAME=My Server            # Display name
+**All Servers**
 
-# For broadcasting servers
-MCP_ENABLE_BROADCAST=true            # Enable multicast
-MCP_BROADCAST_INTERVAL=30            # Broadcast every N seconds
+```bash
+MCP_TRANSPORT=http                  # Transport mode
+MCP_PORT=3001                       # Server port
+MCP_SERVER_NAME="My Server"         # Display name in hub
 ```
 
-## API Endpoints
+**Broadcasting Servers (Multicast Discovery)**
 
-### GET `/servers`
+```bash
+MCP_ENABLE_BROADCAST=true           # Enable multicast announcements
+MCP_BROADCAST_INTERVAL=30           # Broadcast every N seconds (like UPnP SSDP)
+MCP_MULTICAST_ADDRESS=239.255.255.250  # Multicast group
+MCP_MULTICAST_PORT=5353             # Multicast port (like UPnP)
+```
 
-List all discovered servers and their tools
+## API Reference
+
+### GET /servers
+
+List all discovered servers and their tools.
 
 **Response:**
 
@@ -178,6 +247,7 @@ List all discovered servers and their tools
     "port": 3001,
     "endpoint": "/mcp",
     "status": "online",
+    "protocol_type": "MCP-HTTP",
     "tools": [
       {
         "name": "list_containers",
@@ -189,9 +259,9 @@ List all discovered servers and their tools
 ]
 ```
 
-### POST `/execute-tool`
+### POST /execute-tool
 
-Execute a tool on a specific server
+Execute a tool on a specific server.
 
 **Request:**
 
@@ -203,9 +273,9 @@ Execute a tool on a specific server
 }
 ```
 
-### POST `/scan`
+### POST /scan-network
 
-Manually scan network for servers (without broadcasts)
+Manually scan network for servers (fallback if multicast unavailable).
 
 **Request:**
 
@@ -215,44 +285,39 @@ Manually scan network for servers (without broadcasts)
 }
 ```
 
-### WebSocket `/ws`
+### POST /chat
 
-Real-time server discovery updates
+Send a chat message with selected tools to configured LLM.
 
-Connect to receive:
+**Request:**
 
-- Server discovery events
-- Server status changes
-- Tool catalog updates
+```json
+{
+  "message": "List my files and create a summary",
+  "selected_tools": [
+    { "server_id": "192.168.1.1:3001", "tool_name": "read_file" },
+    { "server_id": "192.168.1.1:3001", "tool_name": "list_directory" }
+  ]
+}
+```
 
-## Protocol Details
+### WS /ws
 
-### Traditional MCP
+Real-time WebSocket connection for server discovery and status updates.
 
-- Full JSON-RPC 2.0 format with `jsonrpc` and `id` fields
-- Session-based: requires `Mcp-Session-Id` header
-- Stateful communication across multiple requests
-- Best for: Complex workflows requiring state
+**Message Types:**
 
-### FastMCP HTTP
+- `server_discovered` - New server found
+- `server_offline` - Server went offline
+- `chat_chunk` - Streaming chat response
+- `tool_executed` - Tool execution result
+- `error` - Error message
 
-- JSON-RPC 2.0 with `jsonrpc` and `id` fields
-- Session-based: requires `Mcp-Session-Id` header
-- Requires `notifications/initialized` after initialize
-- Returns SSE or JSON responses
-- Best for: FastMCP library users wanting HTTP mode
+## Discovery Protocol Details
 
-### FastMCP Streamable-HTTP
+### Multicast Broadcasting (Like UPnP SSDP)
 
-- Simplified format: no `jsonrpc` or `id` fields
-- No session management required
-- Direct HTTP requests
-- Plain JSON responses
-- Best for: Simple stateless operations
-
-## Multicast Broadcasting Details
-
-Servers broadcast UDP packets containing:
+Servers broadcast UDP packets on the multicast address `239.255.255.250:5353` every 30 seconds:
 
 ```json
 {
@@ -263,125 +328,194 @@ Servers broadcast UDP packets containing:
   "port": 3001,
   "endpoint": "/mcp",
   "transport": "http",
-  "protocol_type": "MCP-HTTP"
+  "protocol_type": "MCP-HTTP",
+  "tools_count": 5,
+  "ttl": 120
 }
 ```
 
 **Benefits:**
 
-- Zero configuration required
-- Automatic server detection
-- Scales to multiple networks
-- Low overhead (30-second intervals)
+- Zero manual configuration required
+- Automatic server detection across networks
+- Low overhead (30-second broadcast intervals)
 - Survives network interruptions
+- Works with network segmentation
+
+### HTTP Probing (Fallback)
+
+If multicast is unavailable (some networks block UDP), the hub can manually probe configurable port ranges:
+
+```bash
+POST /scan-network
+{
+  "ports": [3000, 3001, 3002, 8080, 9000],
+  "timeout": 5000
+}
+```
+
+This ensures discovery works in any environment.
 
 ## Use Cases
 
-### 1. Containerized Environments
+### Single Network Deployment
 
-Deploy multiple MCP servers in Docker/Podman and automatically discover them:
+```
+192.168.1.0/24
+├─ 192.168.1.10: Podman Server (port 3001)
+├─ 192.168.1.20: Database Server (port 3002)
+├─ 192.168.1.30: File System Server (port 3001)
+└─ 192.168.1.40: Discovery Hub (port 8000)
+    └─ Auto-discovers all three servers instantly
+```
+
+### Containerized Environment
+
+Deploy multiple MCP servers in Docker/Podman with automatic discovery:
 
 ```bash
 docker run -p 3001:3001 \
   -e MCP_TRANSPORT=http \
   -e MCP_PORT=3001 \
+  -e MCP_ENABLE_BROADCAST=true \
   podman-mcp-server
 ```
 
-### 2. Development Workflows
+### Multi-Tool Orchestration
 
-Quickly spin up test servers and have them automatically registered:
-
-```bash
-# Terminal 1
-uv run file-system-server.py
-
-# Terminal 2
-uv run database-server.py
-
-# Terminal 3
-python mcp_discovery.py  # Automatically finds both!
+```
+1. Discover: File System MCP, Database MCP, Web Scraper MCP
+2. Select: read_file, query_sql, fetch_url
+3. Chat: "Read data.json, query matching records, scrape additional info"
+4. LLM orchestrates all tools automatically
 ```
 
-### 3. LLM Integration
+### LLM Integration
 
-Route tool calls from multiple LLMs to appropriate MCP servers:
+Route tool calls from multiple LLM providers to appropriate MCP servers:
 
 ```python
-# Claude with access to all discovered tools
 response = client.messages.create(
-    model="claude-3-sonnet",
-    tools=hub.get_all_tools(),
-    messages=[...]
+  model="claude-3-sonnet",
+  tools=hub.get_all_tools(),
+  messages=[...]
 )
 ```
 
-### 4. Remote Server Networks
+## Protocol Comparison
 
-Deploy servers across multiple machines on the same network:
+### Traditional MCP (JSON-RPC)
 
-```
-Network: 192.168.1.0/24
-├─ 192.168.1.10: Podman Server (port 3001)
-├─ 192.168.1.20: Database Server (port 3002)
-├─ 192.168.1.30: File System Server (port 3001)
-└─ 192.168.1.40: Discovery Hub (port 8000)
-   └─ Auto-discovers all three servers
-```
+- Full JSON-RPC 2.0 compliance
+- Session-based via `Mcp-Session-Id` header
+- Stateful communication across requests
+- Best for: Complex workflows requiring state
 
-## Comparison: Before vs After
+### FastMCP HTTP Mode (JSON-RPC)
 
-| Feature            | v1.0             | v2.0                                           |
-| ------------------ | ---------------- | ---------------------------------------------- |
-| Server Types       | 1 (Traditional)  | 3 (Traditional, FastMCP HTTP, Streamable-HTTP) |
-| Discovery          | Manual scan only | Automatic multicast + manual scan              |
-| Configuration      | Required         | Zero-config with broadcasts                    |
-| Protocol Support   | JSON-RPC only    | JSON-RPC + Simplified format                   |
-| Session Management | Manual           | Automatic                                      |
-| Response Format    | JSON             | JSON + SSE                                     |
-| Scaling            | Limited          | Multi-network capable                          |
+- JSON-RPC 2.0 with automatic sessions
+- Requires `notifications/initialized` after initialize
+- Returns SSE or JSON responses
+- Best for: FastMCP library users wanting HTTP mode
+
+### FastMCP Streamable-HTTP (Simplified)
+
+- Simplified format without JSON-RPC wrapper
+- No session management required
+- Direct HTTP requests with plain JSON
+- Best for: Lightweight stateless operations
 
 ## Installation
 
+### Prerequisites
+
+- Python 3.8+
+- Node.js 16+ (for frontend)
+- An LLM provider (Ollama, OpenAI, Claude, etc.)
+
+### Full Setup
+
 ```bash
 # Clone repository
-git clone https://github.com/kunwarmahen/mcp-discovery-hub
-cd mcp-discovery-hub
+git clone https://github.com/kunwarmahen/mcp-discovery-hub-mcast.git
+cd mcp-discovery-hub-mcast
 
-# Install dependencies
+# Backend setup
+cd backend
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 
-# Configure environment
-cp .env.example .env
+# Frontend setup (optional)
+cd ../frontend
+npm install
 
-# Run
-python mcp_discovery.py
+# Run both (in separate terminals)
+# Terminal 1: Backend
+python ../backend/mcp_discovery.py
+
+# Terminal 2: Frontend
+npm run dev
+
+# Terminal 3: LLM (if using Ollama)
+ollama serve
+
+# Terminal 4+: MCP Servers
+python sample_mcp_server.py
 ```
 
-## Requirements
+## Troubleshooting
 
-- Python 3.10+
-- FastAPI
-- httpx
-- pydantic
-- python-dotenv
+| Problem                     | Solutions                                                                                                                                                                   |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Servers not discovered**  | ✅ Ensure servers are running<br>✅ Check multicast is enabled on network<br>✅ Verify firewall allows UDP 239.255.255.250:5353<br>✅ Try manual scan: `POST /scan-network` |
+| **WebSocket disconnected**  | ✅ Backend running?<br>✅ Check firewall/proxy settings<br>✅ Verify WebSocket URL in frontend config                                                                       |
+| **Tools not executing**     | ✅ Server online? (Check status badge)<br>✅ Tool parameters correct?<br>✅ LLM configured and running?                                                                     |
+| **No multicast on network** | ✅ Use fallback: `POST /scan-network`<br>✅ Manually specify IP ranges<br>✅ Check network isolation policies                                                               |
+
+## Version History
+
+| Feature          | v1.0         | v2.0                         |
+| ---------------- | ------------ | ---------------------------- |
+| Discovery Method | HTTP probing | Multicast UDP + HTTP probing |
+| Server Types     | 1            | 3                            |
+| Configuration    | Manual       | Zero-config broadcasts       |
+| Protocol Support | JSON-RPC     | JSON-RPC + Simplified        |
+| UI               | Vite React   | Real-time updates            |
+| Multi-LLM        | Basic        | Full support                 |
 
 ## Contributing
 
-Contributions are welcome! Areas for enhancement:
+We welcome contributions! Areas for enhancement:
 
 - Additional transport protocols
-- Authentication mechanisms
+- Authentication & authorization
 - Server performance monitoring
-- Advanced routing policies
+- Advanced tool chaining and workflows
 - Web UI improvements
+- Documentation & examples
+- Test coverage
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT License - See [LICENSE](LICENSE) file for details.
+
+## Resources
+
+- [Model Context Protocol](https://modelcontextprotocol.io) - MCP specification
+- [UPnP/DLNA](https://en.wikipedia.org/wiki/Universal_Plug_and_Play) - Zero-config inspiration
+- [FastAPI](https://fastapi.tiangolo.com/) - Backend framework
+- [React](https://react.dev/) - Frontend framework
+- [Ollama](https://ollama.ai/) - Local LLM runtime
 
 ## Support
 
-- Issues: https://github.com/kunwarmahen/mcp-discovery-hub/issues
-- Discussions: https://github.com/kunwarmahen/mcp-discovery-hub/discussions
-- Documentation: https://github.com/kunwarmahen/mcp-discovery-hub/wiki
+- 📖 [Documentation](./docs)
+- 🐛 [Issues](https://github.com/kunwarmahen/mcp-discovery-hub-mcast/issues)
+- 💬 [Discussions](https://github.com/kunwarmahen/mcp-discovery-hub-mcast/discussions)
+
+---
+
+Built with ❤️ by developers, for developers. If you find this useful, please star it! ⭐
