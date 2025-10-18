@@ -167,6 +167,26 @@ MCP_TRANSPORT=http MCP_PORT=3001 uv run main.py
 MCP_TRANSPORT=streamable-http MCP_PORT=3001 uv run main.py
 ```
 
+### More Sample Multicast Servers
+
+**Multicast DB MCP Server**
+
+Query and manage databases through the Model Context Protocol.
+
+[db-mcp-server](https://github.com/kunwarmahen/db-mcp-server)
+
+**Multicast Podman MCP Server**
+
+Container management made accessible through the Model Context Protocol.
+
+[podman-mcp-server](https://github.com/kunwarmahen/podman-mcp-server)
+
+**Multicast SSH MCP Server**
+
+A secure Model Context Protocol (MCP) server that enables remote SSH command execution
+
+[ssh-mcp-server](https://github.com/kunwarmahen/ssh-mcp-server)
+
 Servers are discovered automatically as they come online.
 
 ### 3. Setup Frontend (Optional - for beautiful UI)
