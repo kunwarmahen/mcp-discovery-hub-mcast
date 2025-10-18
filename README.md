@@ -356,6 +356,143 @@ POST /scan-network
 
 This ensures discovery works in any environment.
 
+## Firewall Configuration
+
+The hub uses multicast UDP for server discovery (like UPnP/SSDP). If servers aren't being discovered but work when the firewall is disabled, firewall rules are blocking the traffic.
+
+### Multicast Basics
+
+- **Address**: `239.255.255.250` (SSDP multicast group, same as UPnP)
+- **Port**: `5353` (UDP)
+- **Type**: Multicast (one-to-many, local network only)
+- **Protocol**: IGMP (Internet Group Management Protocol) for group membership
+
+### UFW (Ubuntu/Debian) - The Most Common Issue
+
+This is a very common and frustrating problem when dealing with multicast traffic on Linux firewalls, specifically UFW.
+
+**Why It Fails**
+
+The reason it works when you disable UFW but not when the rule is in place is that UFW's simple rules don't always correctly handle the complexity of multicast and IGMP (Internet Group Management Protocol) packets.
+
+When a firewall is active, it may block not just the data packets but also the IGMP packets that the kernel uses to join the multicast group (`239.255.255.250`). Your application's code may be joining the group, but the firewall is preventing the kernel from receiving the packets, even if you open port 5353/UDP.
+
+**The Fix: Modify UFW's `before.rules`**
+
+For multicast to work reliably with UFW, you often need to insert specific rules into the underlying `iptables` configuration file that UFW uses, which is `/etc/ufw/before.rules`. These rules allow traffic to the entire multicast address range (`224.0.0.0/4`) and explicitly allow the IGMP protocol.
+
+> **Note**: You must be careful when editing this file.
+
+**Step 1: Open the `before.rules` File**
+
+Use a text editor like `nano` or `vim` with `sudo`:
+
+```bash
+sudo nano /etc/ufw/before.rules
+```
+
+**Step 2: Add Multicast and IGMP Rules**
+
+Scroll down in the file until you find the section for allowing incoming traffic, usually near the top, before the line that says `# drop invalid packets`. Add the following block of rules above the `COMMIT` line, and ideally near where other basic protocols (like ICMP/ping) are allowed:
+
+```bash
+#
+# START MCP DISCOVERY MULTICAST RULES
+#
+# Allow all incoming UDP traffic to the multicast address range
+# for the SSDP/MCP Discovery data packets (239.255.255.250 is in 224.0.0.0/4)
+-A ufw-before-input -p udp -d 224.0.0.0/4 -j ACCEPT
+
+# Allow IGMP (Protocol 2) for joining and maintaining multicast groups
+# This is often the critical missing piece.
+-A ufw-before-input -p igmp -j ACCEPT
+
+# Allow incoming UDP packets specifically on port 5353 (SSDP)
+-A ufw-before-input -p udp --dport 5353 -d 239.255.255.250 -j ACCEPT
+#
+# END MCP DISCOVERY MULTICAST RULES
+#
+```
+
+**Rule Explanations:**
+
+- `-p udp -d 224.0.0.0/4 -j ACCEPT`: This is a broad rule that allows all incoming UDP multicast traffic.
+- `-p igmp -j ACCEPT`: This explicitly allows the IGMP control traffic (Protocol 2) needed for your Linux kernel to properly subscribe to the `239.255.255.250` multicast group. **This is often the critical missing piece.**
+- `-p udp --dport 5353 -d 239.255.255.250 -j ACCEPT`: This is the specific rule you were likely trying to add with the simple UFW command, but placing it in `before.rules` with the destination address makes it more reliable.
+
+**Step 3: Save and Reload UFW**
+
+Save the file and exit the editor (`Ctrl+X`, then `Y`, then `Enter` in `nano`).
+
+Now, reload the UFW service to apply the changes to the underlying `iptables` chains:
+
+```bash
+sudo ufw reload
+```
+
+After the reload, your UFW firewall will be active, but the special `before.rules` should now correctly permit the necessary multicast control (IGMP) and data (UDP 5353) packets, allowing your MCP discovery to work.
+
+### Windows Firewall
+
+If using Windows, allow UDP port 5353 for multicast:
+
+```powershell
+# PowerShell (as Administrator)
+New-NetFirewallRule -DisplayName "MCP Discovery Multicast" `
+  -Direction Inbound `
+  -Action Allow `
+  -Protocol UDP `
+  -LocalPort 5353 `
+  -RemoteAddress "239.255.255.250" `
+  -Group "MCP Discovery Hub"
+```
+
+### macOS Firewall
+
+macOS typically allows multicast by default. If issues occur:
+
+```bash
+# Check if firewall is blocking mDNS/multicast
+sudo launchctl list | grep firewall
+
+# Allow multicast if needed (usually not required)
+sudo defaults write /Library/Preferences/com.apple.alf globalstate -int 1
+```
+
+### Docker/Podman Networks
+
+Containers need explicit network configuration for multicast:
+
+```bash
+# Docker - use host network for multicast
+docker run --network host -e MCP_ENABLE_BROADCAST=true my-server
+
+# Podman - similar approach
+podman run --network host -e MCP_ENABLE_BROADCAST=true my-server
+
+# Or use macvlan for container-specific IPs with multicast
+docker network create -d macvlan -o parent=eth0 macvlan-net
+docker run --network macvlan-net -e MCP_ENABLE_BROADCAST=true my-server
+```
+
+### Enterprise/Corporate Networks
+
+Some corporate networks block multicast entirely. Solutions:
+
+1. **Use fallback HTTP probing**:
+
+   ```bash
+   curl -X POST http://localhost:8000/scan-network \
+     -H "Content-Type: application/json" \
+     -d '{"ports": [3000, 3001, 3002, 8080, 9000]}'
+   ```
+
+2. **Request network team to allow multicast range** `224.0.0.0/4` and IGMP protocol
+
+3. **Use VPN with multicast support** if connecting from outside network
+
+4. **Deploy hub on same subnet** as servers to reduce firewall complexity
+
 ## Use Cases
 
 ### Single Network Deployment
@@ -466,12 +603,32 @@ python sample_mcp_server.py
 
 ## Troubleshooting
 
-| Problem                     | Solutions                                                                                                                                                                   |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Servers not discovered**  | ✅ Ensure servers are running<br>✅ Check multicast is enabled on network<br>✅ Verify firewall allows UDP 239.255.255.250:5353<br>✅ Try manual scan: `POST /scan-network` |
-| **WebSocket disconnected**  | ✅ Backend running?<br>✅ Check firewall/proxy settings<br>✅ Verify WebSocket URL in frontend config                                                                       |
-| **Tools not executing**     | ✅ Server online? (Check status badge)<br>✅ Tool parameters correct?<br>✅ LLM configured and running?                                                                     |
-| **No multicast on network** | ✅ Use fallback: `POST /scan-network`<br>✅ Manually specify IP ranges<br>✅ Check network isolation policies                                                               |
+| Problem                                            | Solutions                                                                                                                                                                                                                  |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Servers not discovered**                         | ✅ Ensure servers are running<br>✅ Verify servers have `MCP_ENABLE_BROADCAST=true`<br>✅ Check firewall allows UDP 5353 AND IGMP<br>✅ Test: `sudo tcpdump -i any udp port 5353`<br>✅ Try fallback: `POST /scan-network` |
+| **Works without firewall, fails with UFW enabled** | ✅ Edit `/etc/ufw/before.rules` (see Firewall Configuration above)<br>✅ Add IGMP protocol rule<br>✅ Run `sudo ufw reload`                                                                                                |
+| **Works on Linux, not in Docker**                  | ✅ Use `--network host` for containers<br>✅ Or configure `macvlan` network for multicast<br>✅ Check container network isolation                                                                                          |
+| **WebSocket disconnected**                         | ✅ Backend running?<br>✅ Check firewall/proxy settings<br>✅ Verify WebSocket URL in frontend config                                                                                                                      |
+| **Tools not executing**                            | ✅ Server online? (Check status badge)<br>✅ Tool parameters correct?<br>✅ LLM configured and running?                                                                                                                    |
+| **No multicast on network**                        | ✅ Use fallback: `POST /scan-network`<br>✅ Manually specify IP ranges<br>✅ Check with network admin if multicast is allowed<br>✅ Consider VPN or on-subnet deployment                                                   |
+
+### Debugging Multicast
+
+Check if multicast is working:
+
+```bash
+# Listen for multicast packets
+sudo tcpdump -i any udp port 5353 -v
+
+# In another terminal, trigger a server announcement
+# (should see packets in tcpdump output)
+
+# Test IGMP group membership (Linux)
+netstat -gn | grep 239.255.255.250
+
+# Check multicast routing
+ip mroute
+```
 
 ## Version History
 
@@ -486,7 +643,7 @@ python sample_mcp_server.py
 
 ## Contributing
 
-We welcome contributions! Areas for enhancement:
+We welcome contributions! Areas for enhancement include:
 
 - Additional transport protocols
 - Authentication & authorization
@@ -515,6 +672,12 @@ MIT License - See [LICENSE](LICENSE) file for details.
 - 📖 [Documentation](./docs)
 - 🐛 [Issues](https://github.com/kunwarmahen/mcp-discovery-hub-mcast/issues)
 - 💬 [Discussions](https://github.com/kunwarmahen/mcp-discovery-hub-mcast/discussions)
+
+## Project Evolution
+
+- **v1.0**: [Original blog post](https://medium.com/@kunwarmahen/introducing-mcp-discovery-hub-upnp-dlna-for-ai-tools-54d6ba72ce31) - The inception of the DLNA/UPnP concept
+- **v1.0 Repository**: [github.com/kunwarmahen/mcp-discovery-hub](https://github.com/kunwarmahen/mcp-discovery-hub) - HTTP probing based discovery
+- **v2.0 Repository**: [github.com/kunwarmahen/mcp-discovery-hub-mcast](https://github.com/kunwarmahen/mcp-discovery-hub-mcast) - Multicast UDP discovery (this version)
 
 ---
 
